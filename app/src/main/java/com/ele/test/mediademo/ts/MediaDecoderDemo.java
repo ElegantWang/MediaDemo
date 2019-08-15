@@ -1,5 +1,6 @@
 package com.ele.test.mediademo.ts;
 
+import android.content.ContentResolver;
 import android.graphics.ImageFormat;
 import android.graphics.Rect;
 import android.graphics.YuvImage;
@@ -8,10 +9,14 @@ import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
+import android.net.Uri;
 import android.os.Build;
 import android.util.Log;
 
 import androidx.annotation.RequiresApi;
+
+import com.google.android.exoplayer2.source.hls.DefaultHlsExtractorFactory;
+import com.google.android.exoplayer2.source.hls.HlsExtractorFactory;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -56,7 +61,7 @@ public class MediaDecoderDemo {
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-    public void decodeVideo(String videoFilePath, DecoderListener listener) throws IOException {
+    public void decodeVideo(String videoPath, DecoderListener listener) throws IOException {
         MediaExtractor extractor = null;
         MediaCodec decoder = null;
 
@@ -64,12 +69,19 @@ public class MediaDecoderDemo {
             if (colorFormat != COLOR_FormatI420 && colorFormat != COLOR_FormatNV21) {
                 throw new RuntimeException("color format invalid");
             }
-            File videoFile = new File(videoFilePath);
             extractor = new MediaExtractor();
-            extractor.setDataSource(videoFile.toString());
+            Uri videoUri = Uri.parse(videoPath);
+            String scheme = videoUri.getScheme();
+            if (ContentResolver.SCHEME_FILE.equals(scheme)) {
+                extractor.setDataSource(new File(videoPath).toString());
+                return;
+            } else {
+                extractor.setDataSource(videoPath);
+            }
+
             int trackIndex = selectTrack(extractor);
             if (trackIndex < 0) {
-                throw new RuntimeException("No video track found in " + videoFilePath);
+                throw new RuntimeException("No video track found in " + videoPath);
             }
 
             extractor.selectTrack(trackIndex);

@@ -1,7 +1,9 @@
 package com.ele.test.mediademo;
 
 import android.Manifest;
+import android.content.Context;
 import android.content.pm.PackageManager;
+import android.hardware.display.DisplayManager;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
@@ -25,13 +27,16 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import android.util.Log;
+import android.view.Display;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.VideoView;
 
+import java.io.FileOutputStream;
 import java.io.IOException;
 
 import javax.crypto.Mac;
@@ -83,8 +88,34 @@ public class MainActivity extends AppCompatActivity {
                             MediaDecoderDemo mediaDecoderDemo = new MediaDecoderDemo();
                             // mediaDecoderDemo.setSaveFrames(MainActivity.this.getExternalCacheDir().getAbsolutePath(), MediaDecoderDemo.FILE_TypeI420);
                             // mediaDecoderDemo.videoDecode("/data/local/tmp/dvr_v_p479_4475272588.ts");
-                            mediaDecoderDemo.setColorFormat(MediaDecoderDemo.COLOR_FormatI420);
-                            mediaDecoderDemo.decodeVideo("/data/local/tmp/anetstream.ts", null);
+                            mediaDecoderDemo.setColorFormat(MediaDecoderDemo.COLOR_FormatNV21);
+                            // mediaDecoderDemo.decodeVideo("/data/local/tmp/anetstream.ts", null);
+                            mediaDecoderDemo.decodeVideo("http://tx.hls.huya.com/huyalive/30765679-2475713500-10633108516765696000-2789274576-10057-A-0-1.m3u8", new MediaDecoderDemo.DecoderListener() {
+                                String outDir = MainActivity.this.getExternalCacheDir().getAbsolutePath();
+                                String fileNamePattern = outDir + "/frame%05d.yuv";
+
+                                @Override
+                                public void onSize(MediaDecoderDemo decoderDemo, int width, int height) {
+                                    setHint(String.format("Media Size:%d x %d", width, height));
+                                }
+
+                                @Override
+                                public void onFrameData(MediaDecoderDemo decoderDemo, int frameSeq, long presentationTimeUs, byte[] data) {
+                                    try {
+                                        FileOutputStream outputStream = new FileOutputStream(String.format(fileNamePattern, frameSeq));
+                                        outputStream.write(data);
+                                        outputStream.close();
+
+                                    } catch (Exception e) {
+                                        e.printStackTrace();
+                                    }
+                                }
+
+                                @Override
+                                public void onEnd() {
+
+                                }
+                            });
                             setHint("Media Demo finish");
                         } catch (IOException e) {
                             e.printStackTrace();
@@ -126,6 +157,10 @@ public class MainActivity extends AppCompatActivity {
                 for (MediaCodecInfo mediaCodecInfo : mediaCodecInfos) {
                     Log.e("XXXXX", MediaCodecUtil.descMediaCodecInfo(mediaCodecInfo));
                 }
+
+                DisplayManager displayManager = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
+                Display[] displays = displayManager.getDisplays();
+                Log.e("XXXXX", "Display Size:" + displays.length);
             }
         });
     }

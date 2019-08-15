@@ -27,15 +27,18 @@ public class MediaConvert {
 
     public MediaConvert(String source, String target, String outDir) {
         mDecoder = new MediaDecoderDemo();
-        mDecoder.setColorFormat(MediaDecoderDemo.COLOR_FormatI420);
+        //mDecoder.setColorFormat(MediaDecoderDemo.COLOR_FormatI420);
+        mDecoder.setColorFormat(MediaDecoderDemo.COLOR_FormatNV21);
         mSource = source;
         mTarget = target;
         mOutDir = outDir;
 
 
         // mEncoder = new MediaEncoderDemo("video/hevc", 1280, 720);
-        // mEncoder = new MediaEncoderDemo("video/avc", 896, 480);
-        mEncoder = new MediaEncoderDemo2("video/avc", 1920, 1080);
+        // mEncoder = new MediaEncoderDemo2("video/avc", 896, 480);
+        // mEncoder = new MediaEncoderDemo2("video/avc", 600, 320);
+        // mEncoder = new MediaEncoderDemo2("video/hevc", 896, 480);
+        mEncoder = new MediaEncoderDemo2("video/hevc", 1920, 1080);
 
     }
 
@@ -55,14 +58,14 @@ public class MediaConvert {
                             public void onFrameData(MediaDecoderDemo decoderDemo, int frameSeq, long presentationTimeUs, byte[] data) {
                                 Log.e(TAG, "decode listener onFrameData " + frameSeq);
                                 mEncoder.inputFrameToEncoder(presentationTimeUs, data);
-                                /*try {
+                                try {
                                     FileOutputStream outputStream = new FileOutputStream(mOutDir + "/frame" + frameSeq + ".yuv");
                                     outputStream.write(data);
                                     outputStream.close();
 
                                 } catch (Exception e) {
                                     e.printStackTrace();
-                                }*/
+                                }
                             }
 
                             @Override
