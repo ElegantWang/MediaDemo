@@ -52,8 +52,8 @@ public class MediaEncoderDemo2 {
         // BITRATE_MODE_CQ: 表示完全不控制码率，尽最大可能保证图像质量
         // BITRATE_MODE_CBR: 表示编码器会尽量把输出码率控制为设定值
         // BITRATE_MODE_VBR: 表示编码器会根据图像内容的复杂度（实际上是帧间变化量的大小）来动态调整输出码率，图像复杂则码率高，图像简单则码率低
-        // mMediaFormat.setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR);
         mMediaFormat.setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR);
+        // mMediaFormat.setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR);
         mMediaFormat.setInteger(MediaFormat.KEY_BIT_RATE, (int) (1 * 1000 * 1000)); // 2Mbps
         mMediaFormat.setInteger(MediaFormat.KEY_FRAME_RATE, 30);
         mMediaFormat.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
@@ -137,9 +137,9 @@ public class MediaEncoderDemo2 {
                 if (mInputEndTimes < INPUT_END_TIMES) {
                     SystemClock.sleep(500);
                     mInputEndTimes++;
-                    if (mInputEndTimes == INPUT_END_TIMES - 1) {
+                    /*if (mInputEndTimes == INPUT_END_TIMES - 1) {
                         // mEncoder.signalEndOfInputStream();
-                    }
+                    }*/
                 } else {
                     break;
                 }

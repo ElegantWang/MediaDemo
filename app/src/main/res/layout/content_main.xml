@@ -38,4 +38,10 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Show Codec" />
+
+    <Button
+        android:id="@+id/btn_exo_hls_test"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Exo Hls Test" />
 </LinearLayout>

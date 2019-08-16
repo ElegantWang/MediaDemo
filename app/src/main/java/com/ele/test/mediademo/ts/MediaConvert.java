@@ -44,6 +44,7 @@ public class MediaConvert {
 
     public void start() {
         try {
+            Log.e("XXXXXXX", "start...");
             new Thread(new Runnable() {
                 @Override
                 public void run() {
@@ -58,14 +59,14 @@ public class MediaConvert {
                             public void onFrameData(MediaDecoderDemo decoderDemo, int frameSeq, long presentationTimeUs, byte[] data) {
                                 Log.e(TAG, "decode listener onFrameData " + frameSeq);
                                 mEncoder.inputFrameToEncoder(presentationTimeUs, data);
-                                try {
+                                /*try {
                                     FileOutputStream outputStream = new FileOutputStream(mOutDir + "/frame" + frameSeq + ".yuv");
                                     outputStream.write(data);
                                     outputStream.close();
 
                                 } catch (Exception e) {
                                     e.printStackTrace();
-                                }
+                                }*/
                             }
 
                             @Override
@@ -113,7 +114,7 @@ public class MediaConvert {
 
                 @Override
                 public void onEnd() {
-                    Log.e(TAG, "encoder listener onEnd");
+                    Log.e("XXXXXXX", "encoder listener onEnd");
                     checkMediaMuxer();
                     mediaMuxer.stop();
                     mediaMuxer.release();

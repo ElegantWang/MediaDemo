@@ -12,6 +12,7 @@ import android.media.audiofx.LoudnessEnhancer;
 import android.os.Build;
 import android.os.Bundle;
 
+import com.ele.test.mediademo.exo.HlsMediaSourceTest;
 import com.ele.test.mediademo.ts.MediaConvert;
 import com.ele.test.mediademo.ts.MediaDecoderDemo;
 import com.ele.test.mediademo.ts.TsDemo;
@@ -136,7 +137,8 @@ public class MainActivity extends AppCompatActivity {
                         try {
                             setHint("Media Convert running...");
                             // String sourceFile = "/data/local/tmp/anetstream.ts";
-                            String sourceFile = "/data/local/tmp/dvr_v_p479_4475272588.ts";
+                            // String sourceFile = "/data/local/tmp/dvr_v_p479_4475272588.ts";
+                            String sourceFile = "/data/local/tmp/test.ts";
                             MediaConvert mediaConvert = new MediaConvert(sourceFile, MainActivity.this.getExternalCacheDir().getAbsolutePath() + "/convert.out", MainActivity.this.getExternalCacheDir().getAbsolutePath());
                             mediaConvert.start();
                             setHint("Media Convert finish");
@@ -161,6 +163,14 @@ public class MainActivity extends AppCompatActivity {
                 DisplayManager displayManager = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
                 Display[] displays = displayManager.getDisplays();
                 Log.e("XXXXX", "Display Size:" + displays.length);
+            }
+        });
+
+        findViewById(R.id.btn_exo_hls_test).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                HlsMediaSourceTest hlsMediaSourceTest = new HlsMediaSourceTest(MainActivity.this);
+                hlsMediaSourceTest.start();
             }
         });
     }
