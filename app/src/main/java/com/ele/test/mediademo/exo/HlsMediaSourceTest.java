@@ -10,11 +10,25 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.google.android.exoplayer2.C;
+import com.google.android.exoplayer2.DefaultRenderersFactory;
+import com.google.android.exoplayer2.Renderer;
+import com.google.android.exoplayer2.RendererCapabilities;
+import com.google.android.exoplayer2.RenderersFactory;
 import com.google.android.exoplayer2.Timeline;
+import com.google.android.exoplayer2.audio.AudioRendererEventListener;
+import com.google.android.exoplayer2.drm.DrmSessionManager;
+import com.google.android.exoplayer2.drm.FrameworkMediaCrypto;
+import com.google.android.exoplayer2.mediacodec.MediaCodecSelector;
+import com.google.android.exoplayer2.metadata.MetadataOutput;
 import com.google.android.exoplayer2.source.MediaPeriod;
 import com.google.android.exoplayer2.source.MediaSource;
+import com.google.android.exoplayer2.source.TrackGroupArray;
 import com.google.android.exoplayer2.source.hls.DefaultHlsExtractorFactory;
 import com.google.android.exoplayer2.source.hls.HlsMediaSource;
+import com.google.android.exoplayer2.text.TextOutput;
+import com.google.android.exoplayer2.trackselection.DefaultTrackSelector;
+import com.google.android.exoplayer2.trackselection.MappingTrackSelector;
+import com.google.android.exoplayer2.trackselection.TrackSelection;
 import com.google.android.exoplayer2.upstream.Allocator;
 import com.google.android.exoplayer2.upstream.DataSource;
 import com.google.android.exoplayer2.upstream.DataSpec;
@@ -22,9 +36,12 @@ import com.google.android.exoplayer2.upstream.DefaultAllocator;
 import com.google.android.exoplayer2.upstream.DefaultHttpDataSourceFactory;
 import com.google.android.exoplayer2.upstream.TransferListener;
 import com.google.android.exoplayer2.util.Util;
+import com.google.android.exoplayer2.video.VideoRendererEventListener;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 import timber.log.Timber;
 
@@ -43,13 +60,26 @@ public class HlsMediaSourceTest implements MediaSource.SourceInfoRefreshListener
     public Object manifest;
     public MediaPeriod[] mediaPeriods;
     private final ArrayList<MediaPeriod> pendingMediaPeriods;
+    private List<TrackSelection>[][] trackSelectionsByPeriodAndRenderer;
+    private List<TrackSelection>[][] immutableTrackSelectionsByPeriodAndRenderer;
 
     private boolean released;
+    private MyMediaCodecVideoRenderer videoRenderer;
+    private MyMediaCodecAudioRenderer audioRenderer;
+    RenderersFactory renderersFactory;
+    private RendererCapabilities[] rendererCapabilities;
+    private DefaultTrackSelector trackSelector;
+
+    private TrackGroupArray trackGroupArray;
+    private MappingTrackSelector.MappedTrackInfo mappedTrackInfo;
 
     private static final int MESSAGE_PREPARE_SOURCE = 0;
     private static final int MESSAGE_CHECK_FOR_FAILURE = 1;
     private static final int MESSAGE_CONTINUE_LOADING = 2;
     private static final int MESSAGE_RELEASE = 3;
+
+    public static final DefaultTrackSelector.Parameters DEFAULT_TRACK_SELECTOR_PARAMETERS =
+            new DefaultTrackSelector.ParametersBuilder().setForceHighestSupportedBitrate(true).build();
 
     public HlsMediaSourceTest(Context context) {
         mContext = context;
@@ -60,6 +90,20 @@ public class HlsMediaSourceTest implements MediaSource.SourceInfoRefreshListener
 
         allocator = new DefaultAllocator(true, C.DEFAULT_BUFFER_SEGMENT_SIZE);
         pendingMediaPeriods = new ArrayList<>();
+
+        audioRenderer = new MyMediaCodecAudioRenderer(context, MediaCodecSelector.DEFAULT);
+        videoRenderer = new MyMediaCodecVideoRenderer(context, MediaCodecSelector.DEFAULT);
+
+        renderersFactory = new RenderersFactory() {
+            @Override
+            public Renderer[] createRenderers(Handler eventHandler, VideoRendererEventListener videoRendererEventListener, AudioRendererEventListener audioRendererEventListener, TextOutput textRendererOutput, MetadataOutput metadataRendererOutput, @Nullable DrmSessionManager<FrameworkMediaCrypto> drmSessionManager) {
+                return new Renderer[]{audioRenderer, videoRenderer};
+            }
+        };
+        trackSelector = new DefaultTrackSelector();
+        trackSelector.setParameters(DEFAULT_TRACK_SELECTOR_PARAMETERS);
+
+        rendererCapabilities = Util.getRendererCapabilities(renderersFactory, null);
 
         mediaSourceThread = new HandlerThread("HlsMediaSourceTest");
         mediaSourceThread.start();
@@ -144,6 +188,22 @@ public class HlsMediaSourceTest implements MediaSource.SourceInfoRefreshListener
         if (pendingMediaPeriods.isEmpty()) {
             mediaSourceHandler.removeMessages(MESSAGE_CHECK_FOR_FAILURE);
             // downloadHelperHandler.sendEmptyMessage(DOWNLOAD_HELPER_CALLBACK_MESSAGE_PREPARED);
+        }
+
+        // continue process
+        int periodCount = mediaPeriods.length;
+        int rendererCount = rendererCapabilities.length;
+
+        trackSelectionsByPeriodAndRenderer =
+                (List<TrackSelection>[][]) new List<?>[periodCount][rendererCount];
+        immutableTrackSelectionsByPeriodAndRenderer =
+                (List<TrackSelection>[][]) new List<?>[periodCount][rendererCount];
+        for (int i = 0; i < periodCount; i++) {
+            for (int j = 0; j < rendererCount; j++) {
+                trackSelectionsByPeriodAndRenderer[i][j] = new ArrayList<>();
+                immutableTrackSelectionsByPeriodAndRenderer[i][j] =
+                        Collections.unmodifiableList(trackSelectionsByPeriodAndRenderer[i][j]);
+            }
         }
     }
 
