@@ -5,12 +5,15 @@ import android.net.Uri;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Message;
+import android.util.SparseIntArray;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.ele.test.mediademo.DemoApplication;
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.DefaultRenderersFactory;
+import com.google.android.exoplayer2.ExoPlaybackException;
 import com.google.android.exoplayer2.Renderer;
 import com.google.android.exoplayer2.RendererCapabilities;
 import com.google.android.exoplayer2.RenderersFactory;
@@ -20,6 +23,7 @@ import com.google.android.exoplayer2.drm.DrmSessionManager;
 import com.google.android.exoplayer2.drm.FrameworkMediaCrypto;
 import com.google.android.exoplayer2.mediacodec.MediaCodecSelector;
 import com.google.android.exoplayer2.metadata.MetadataOutput;
+import com.google.android.exoplayer2.offline.DownloadHelper;
 import com.google.android.exoplayer2.source.MediaPeriod;
 import com.google.android.exoplayer2.source.MediaSource;
 import com.google.android.exoplayer2.source.TrackGroupArray;
@@ -27,14 +31,20 @@ import com.google.android.exoplayer2.source.hls.DefaultHlsExtractorFactory;
 import com.google.android.exoplayer2.source.hls.HlsMediaSource;
 import com.google.android.exoplayer2.text.TextOutput;
 import com.google.android.exoplayer2.trackselection.DefaultTrackSelector;
+import com.google.android.exoplayer2.trackselection.FixedTrackSelection;
 import com.google.android.exoplayer2.trackselection.MappingTrackSelector;
 import com.google.android.exoplayer2.trackselection.TrackSelection;
+import com.google.android.exoplayer2.trackselection.TrackSelector;
+import com.google.android.exoplayer2.trackselection.TrackSelectorResult;
 import com.google.android.exoplayer2.upstream.Allocator;
+import com.google.android.exoplayer2.upstream.BandwidthMeter;
 import com.google.android.exoplayer2.upstream.DataSource;
 import com.google.android.exoplayer2.upstream.DataSpec;
 import com.google.android.exoplayer2.upstream.DefaultAllocator;
+import com.google.android.exoplayer2.upstream.DefaultBandwidthMeter;
 import com.google.android.exoplayer2.upstream.DefaultHttpDataSourceFactory;
 import com.google.android.exoplayer2.upstream.TransferListener;
+import com.google.android.exoplayer2.util.Assertions;
 import com.google.android.exoplayer2.util.Util;
 import com.google.android.exoplayer2.video.VideoRendererEventListener;
 
@@ -70,8 +80,10 @@ public class HlsMediaSourceTest implements MediaSource.SourceInfoRefreshListener
     private RendererCapabilities[] rendererCapabilities;
     private DefaultTrackSelector trackSelector;
 
-    private TrackGroupArray trackGroupArray;
-    private MappingTrackSelector.MappedTrackInfo mappedTrackInfo;
+    private TrackGroupArray[] trackGroupArrays;
+    private MappingTrackSelector.MappedTrackInfo[] mappedTrackInfos;
+
+    private final SparseIntArray scratchSet;
 
     private static final int MESSAGE_PREPARE_SOURCE = 0;
     private static final int MESSAGE_CHECK_FOR_FAILURE = 1;
@@ -100,10 +112,19 @@ public class HlsMediaSourceTest implements MediaSource.SourceInfoRefreshListener
                 return new Renderer[]{audioRenderer, videoRenderer};
             }
         };
-        trackSelector = new DefaultTrackSelector();
+
+        trackSelector = new DefaultTrackSelector(new FixedTrackSelection.Factory());
         trackSelector.setParameters(DEFAULT_TRACK_SELECTOR_PARAMETERS);
+        trackSelector.init(new TrackSelector.InvalidationListener() {
+            @Override
+            public void onTrackSelectionsInvalidated() {
+                Timber.e("onTrackSelectionsInvalidated");
+            }
+        }, new DefaultBandwidthMeter.Builder(mContext).build());
 
         rendererCapabilities = Util.getRendererCapabilities(renderersFactory, null);
+
+        scratchSet = new SparseIntArray();
 
         mediaSourceThread = new HandlerThread("HlsMediaSourceTest");
         mediaSourceThread.start();
@@ -205,6 +226,14 @@ public class HlsMediaSourceTest implements MediaSource.SourceInfoRefreshListener
                         Collections.unmodifiableList(trackSelectionsByPeriodAndRenderer[i][j]);
             }
         }
+        trackGroupArrays = new TrackGroupArray[periodCount];
+        mappedTrackInfos = new MappingTrackSelector.MappedTrackInfo[periodCount];
+        for (int i = 0; i < periodCount; i++) {
+            trackGroupArrays[i] = mediaPeriods[i].getTrackGroups();
+            TrackSelectorResult trackSelectorResult = runTrackSelection(i);
+            trackSelector.onSelectionActivated(trackSelectorResult.info);
+            mappedTrackInfos[i] = Assertions.checkNotNull(trackSelector.getCurrentMappedTrackInfo());
+        }
     }
 
     @Override
@@ -220,5 +249,49 @@ public class HlsMediaSourceTest implements MediaSource.SourceInfoRefreshListener
         }
         released = true;
         mediaSourceHandler.sendEmptyMessage(MESSAGE_RELEASE);
+    }
+
+    private TrackSelectorResult runTrackSelection(int periodIndex) {
+        try {
+            TrackSelectorResult trackSelectorResult = trackSelector.selectTracks(
+                    rendererCapabilities,
+                    trackGroupArrays[periodIndex],
+                    new MediaSource.MediaPeriodId(timeline.getUidOfPeriod(periodIndex)),
+                    timeline);
+            for (int i = 0; i < trackSelectorResult.length; i++) {
+                TrackSelection newSelection = trackSelectorResult.selections.get(i);
+                if (newSelection == null) continue;
+                List<TrackSelection> existingSelectionList = trackSelectionsByPeriodAndRenderer[periodIndex][i];
+                boolean mergedWithExistingSelection = false;
+                for (int j = 0; j < existingSelectionList.size(); j++) {
+                    TrackSelection existingSelection = existingSelectionList.get(j);
+                    if (existingSelection.getTrackGroup() == newSelection.getTrackGroup()) {
+                        // Merge with existing selection.
+                        scratchSet.clear();
+                        for (int k = 0; k < existingSelection.length(); k++) {
+                            scratchSet.put(existingSelection.getIndexInTrackGroup(k), 0);
+                        }
+                        for (int k = 0; k < newSelection.length(); k++) {
+                            scratchSet.put(newSelection.getIndexInTrackGroup(k), 0);
+                        }
+                        int[] mergedTracks = new int[scratchSet.size()];
+                        for (int k = 0; k < scratchSet.size(); k++) {
+                            mergedTracks[k] = scratchSet.keyAt(k);
+                        }
+                        // existingSelectionList.set(j, new DownloadHelper.DownloadTrackSelection(existingSelection.getTrackGroup(), mergedTracks));
+                        existingSelectionList.set(j, new FixedTrackSelection(existingSelection.getTrackGroup(), existingSelection.getIndexInTrackGroup(0)));
+                        mergedWithExistingSelection = true;
+                        break;
+                    }
+                }
+                if (!mergedWithExistingSelection) {
+                    existingSelectionList.add(newSelection);
+                }
+            }
+            return trackSelectorResult;
+        } catch (ExoPlaybackException e) {
+            // DefaultTrackSelector does not throw exceptions during track selection.
+            throw new UnsupportedOperationException(e);
+        }
     }
 }
